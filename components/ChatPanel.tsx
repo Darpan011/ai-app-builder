@@ -5,8 +5,10 @@ import { BlueTitle } from './resuables';
 import PricingModal from './PricingModal';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
-import { Check, Loader2 } from 'lucide-react';
+import { ArrowUp, Check, Loader2 } from 'lucide-react';
 import { KeyboardEvent } from 'react';
+import { Button } from './ui/button';
+import { Paperclip } from 'lucide-react';
 // import ReactMarkdown from 'react-markdown';
 
 interface ChatPanelProps {
@@ -259,7 +261,40 @@ const ChatPanel = ({
           className="w-full resize-none bg-transparent px-3.5 pb-2 pt-3 text-[13px] text-white/80 placeholder:text-white/20 focus:outline-none"
           style={{ maxHeight: 160 }}
           />
+
+          <div className="flex items-center justify-between px-2 pb-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled
+              className="h-7 w-7 rounded-lg text-white/25 opacity-40"
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+            </Button>
+
+            <Button
+              size="icon"
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className={cn(
+                "h-7 w-7 rounded-lg transition-all",
+                canSubmit
+                  ? "bg-white text-black hover:bg-white/90 active:scale-95"
+                  : "bg-white/8 text-white/20 shadow-none"
+              )}
+            >
+              {isGenerating || isImproving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ArrowUp className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </div>
         </div>
+
+        <p className="mt-1.5 text-center text-[10px] text-white/15">
+          ↵ to send • Shift+↵ for new line
+        </p>
       </div>
     </div>
   )

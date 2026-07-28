@@ -53,7 +53,21 @@ export async function POST(request: NextRequest) {
     if (user.credits < CREDIT_COST_PER_GENERATION) {
         return Response.json(
             { message: "Insufficient credits" },
-            { status: 402 }
+            { status: 402 },
         );
     }
+
+    const encoder = new TextEncoder();
+
+    const stream = new ReadableStream({
+        async start(controller) {
+          const enqueue = (chunk: string) => {
+            controller.enqueue(encoder.encode(chunk));
+
+            try{
+              const contents = buildContents(messages, fileData);
+            }catch (error) {}
+          };
+        },
+    });
 }

@@ -4,6 +4,42 @@ import { FileData, Message  } from "@/types/workspace";
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest } from "next/server";
 
+function trimHistory(messages: Message[]): Message[] {
+  if (messages.length <= 10) return messages;
+
+  return [messages[0], ...messages.slice(-8)];
+}
+
+function buildContents(messages: Message[], fileData: FileData | null){
+  const trimmed = trimHistory(messages);
+
+  return trimmed.map((msg, idx) => {
+    const role = msg.role === "assistant" ? "model" : "user";
+
+    if(msg.role === "user"){
+      const parts: object[] = [];
+
+      let text = msg.content;
+
+      if (msg.imageUrl) {
+        text = `[The user has attached an image. Use this URL directly in the generated app where relevant (as img src, background-image, etc.): ${msg.imageUrl}]\n\n${text}`;
+      }
+
+      const isLast = idx === trimmed.length - 1;
+
+      if (isLast && fileData) {
+        text +=
+          "\n\nCurrent project files for context:\n" +
+          JSON.stringify(fileData, null, 2);
+      }
+
+      parts.push({ text });
+
+      return { role, parts };
+    }
+  })
+}
+
 export async function POST(request: NextRequest) {
   const { userId: clerkId } = await auth();
 

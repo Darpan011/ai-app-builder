@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
 
     const stream = new ReadableStream({
         async start(controller) {
-          const enqueue = async (chunk: string) => {
+          const enqueue = async (chunk: string) =>
             controller.enqueue(encoder.encode(chunk));
 
             try{
@@ -286,10 +286,88 @@ export async function POST(request: NextRequest) {
                 files,
                 dependencies: validatedDeps,
                 title: aiTitle,
-              }
+              };
+              // ── Upsert workspace + deduct credit (single transaction) ─────────────────────
+              // Atomic: if either the DB write or the credit deduction fails,
+              // neither happens — user never loses a credit on a failed save.
+              // workspaceId is null on first generation → create, string → update.
 
-            }catch (error) {}
-          };
-        },
+              enqueue(
+                sseEvent("status", {
+                  message: "Saving…",
+                })
+              );
+
+              const lastUserMsg = messages[messages.length - 1];
+
+              const updatedMessages: Message[] = [
+                ...messages,
+                {
+                  role: "assistant",
+                  content: assistantMessage,
+                },
+              ];
+
+              const [workspace] = await db.$transaction([
+                workspaceId
+                  ? db.workspace.update({
+                      where: { id: workspaceId, userId },
+                      data: {
+                        messages: updatedMessages as never,
+                        fileData: newFileData as never,
+                      },
+                    })
+                  : db.workspace.create({
+                      data: {
+                        userId,
+                        title: aiTitle ?? lastUserMsg.content.slice(0, 80),
+                        messages: updatedMessages as never,
+                        fileData: newFileData as never,
+                      },
+                    }),
+                db.user.update({
+                  where: { id: userId },
+                  data: { credits: { decrement: CREDIT_COST_PER_GENERATION } },
+                }),
+              ]);
+
+              const updatedUser = await db.user.findUnique({
+                where: { id: userId },
+                select: { credits: true },
+              });
+
+              enqueue(
+                sseEvent("done", {
+                  workspaceId: workspace.id,
+                  assistantMessage,
+                  fileData: newFileData,
+                  creditsRemaining:
+                    updatedUser?.credits ?? user.credits - CREDIT_COST_PER_GENERATION,
+                })
+              );
+
+
+            }catch (err) {
+              console.error("[gen-ai-code] stream error:", err);
+              enqueue(
+                sseEvent("error", {
+                  message: "Something went wrong. Please try again.",
+                }),
+              );
+            }finally {
+              controller.close();
+            }
+        }
     });
-}
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+  }
+
+  export const runtime = "nodejs";
+  export const maxDuration = 300; // for vercel - 300s on Fluid

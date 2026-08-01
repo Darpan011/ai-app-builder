@@ -20,12 +20,42 @@ const WorkspaceClient = ({ initialPrompt, userCredits, userId, userPlan }: works
   const [isGenerating, setIsGenerating] = useState(false);
   const [statusLog, setStatusLog] = useState<StatusStep[]>([]);
 
+  const messagesRef = useRef<Message[]>(messages);
+
+useEffect(() => {
+  messagesRef.current = messages;
+}, [messages]);
+
+const fileDataRef = useRef<FileData | null>(fileData);
+
+useEffect(() => {
+  fileDataRef.current = fileData;
+}, [fileData]);
+
+const workspaceIdRef = useRef<string | null>(workspaceId);
+
+useEffect(() => {
+  workspaceIdRef.current = workspaceId;
+}, [workspaceId]);
+
   const handleFilePatch = useCallback((patches: FileData) => {
     setFileData(patches);
   }, []);
 
   const handleGenerate = useCallback(
-    async (prompt: string, imageur?: string) => {}, 
+    async (prompt: string, imageur?: string) => {
+      if (isGenerating) return;
+      if (credits < MIN_CREDITS_TO_GENERATE) return;
+
+      const userMessage: Message = {
+        role: "user",
+        content: prompt,
+        ...(imageUrl ? { imageUrl } : {}),
+      };
+
+      const currentMessages = messagesRef.current;
+      const currentWorkspaceId = workspaceIdRef.current;
+    }, 
     [credits, isGenerating, userId]);
 
   return (

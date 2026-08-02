@@ -1,8 +1,10 @@
 "use client";
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { CodePanel } from './CodePanel';
 import { FileData, Message, StatusStep } from '@/types/workspace';
 import ChatPanel from './ChatPanel';
+import { MIN_CREDITS_TO_GENERATE } from '@/lib/constants';
+import { toast } from 'sonner';
 
 interface workspaceClientProps {
   initialPrompt: string | null;
@@ -55,6 +57,66 @@ useEffect(() => {
 
       const currentMessages = messagesRef.current;
       const currentWorkspaceId = workspaceIdRef.current;
+
+      setMessages((prev) => [...prev, userMessage]);
+      setIsGenerating(true);
+      setStatusLog([{ label: "Thinking…", status: "running" }]);
+
+      try {
+        const res = await fetch("/api/gen-ai-code", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            workspaceId: currentWorkspaceId,
+            userId,
+            messages: [...currentMessages, userMessage],
+            fileData: fileDataRef.current,
+          }),
+        });
+
+        if (res.status === 402) {
+        toast.error("Not enough credits.");
+
+        setMessages((prev) => prev.slice(0, -1));
+
+        return;
+      }
+
+      if (res.status === 429) {
+        toast.error("Too many requests. Please slow down.");
+
+        setMessages((prev) => prev.slice(0, -1));
+
+        return;
+      }
+
+      if (!res.ok || !res.body) {
+        throw new Error("Generation failed");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        
+        const lines = buffer.split("\n\n");
+
+        // Example buffer after a few chunks might look like:
+        //   "data: {...}\n\ndata: {...}\n\ndata: {inc"
+        // After split:
+        //   ["data: {...}", "data: {...}", "data: {inc"]
+
+        buffer = lines.pop() ?? "";
+      }
+      } catch (error) {}
     }, 
     [credits, isGenerating, userId]);
 
